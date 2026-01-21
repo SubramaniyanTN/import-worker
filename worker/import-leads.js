@@ -73,11 +73,9 @@ async function processJob(job) {
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE).map(mapRow)
-    console.log({batch})
     const { error,data } = await supabase.rpc('bulk_insert_leads', {
       json_data: batch
     })
-    console.log({data,error})
     if (error) throw error
     await sleep(SLEEP_MS)
   }
