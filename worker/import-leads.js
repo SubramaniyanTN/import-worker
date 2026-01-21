@@ -8,41 +8,29 @@ const supabase = createClient(
 )
 
 const BATCH_SIZE = 500
-const SLEEP_MS = 150
+const SLEEP_MS = 100
+const POLL_INTERVAL = 30_000 // check every 30 seconds
 
 const sleep = ms => new Promise(r => setTimeout(r, ms))
 
-async function run() {
-  console.log('🚀 Worker started')
-
-  // 1️⃣ Get pending import jobs
-  const { data: jobs, error } = await supabase
-    .from('import_jobs')
-    .select('*')
-    .eq('status', 'pending')
-    .limit(1)
-
-  if (error || !jobs.length) {
-    console.log('✅ No pending jobs')
-    return
-  }
-
-  const job = jobs[0]
+async function processJob(job) {
   console.log('📂 Processing:', job.file_path)
 
-  // 2️⃣ Download Excel
-  const { data: file } = await supabase.storage
+  const { data: file, error: downloadError } = await supabase.storage
     .from('uploads')
     .download(job.file_path)
 
-  const buffer = await file.arrayBuffer()
-  const workbook = XLSX.read(buffer, { type: 'array' })
+  if (downloadError || !file) {
+    throw new Error('File download failed')
+  }
+
+  const buffer = Buffer.from(await file.arrayBuffer())
+  const workbook = XLSX.read(buffer)
   const sheet = workbook.Sheets[workbook.SheetNames[0]]
   const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' })
 
   console.log(`📊 Rows found: ${rows.length}`)
 
-  // 3️⃣ Insert in batches
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
     const batch = rows.slice(i, i + BATCH_SIZE)
 
@@ -50,23 +38,52 @@ async function run() {
       json_data: batch
     })
 
-    if (error) {
-      console.error('❌ Batch failed', error)
-      await supabase.from('import_jobs')
-        .update({ status: 'failed', error: error.message })
-        .eq('id', job.id)
-      return
-    }
-
+    if (error) throw error
     await sleep(SLEEP_MS)
   }
 
-  // 4️⃣ Mark done
-  await supabase.from('import_jobs')
+  await supabase
+    .from('import_jobs')
     .update({ status: 'done' })
     .eq('id', job.id)
 
-  console.log('✅ Import completed')
+  console.log('✅ Job completed:', job.id)
 }
 
-run().catch(console.error)
+async function workerLoop() {
+  console.log('🚄 Import worker running')
+
+  while (true) {
+    try {
+      const { data: jobs, error } = await supabase
+        .from('import_jobs')
+        .select('*')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: true })
+        .limit(1)
+
+      if (error) throw error
+
+      if (!jobs.length) {
+        console.log('⏳ No pending jobs')
+        await sleep(POLL_INTERVAL)
+        continue
+      }
+
+      const job = jobs[0]
+
+      await supabase
+        .from('import_jobs')
+        .update({ status: 'processing' })
+        .eq('id', job.id)
+
+      await processJob(job)
+
+    } catch (err) {
+      console.error('❌ Worker error:', err.message)
+      await sleep(10_000)
+    }
+  }
+}
+
+workerLoop()
