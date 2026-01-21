@@ -1,18 +1,13 @@
 {
   "name": "import-worker",
-  "version": "1.0.0",
-  "description": "",
-  "main": "index.js",
+  "private": true,
+  "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "start": "node worker/import-leads.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "type": "commonjs",
   "dependencies": {
-    "@supabase/supabase-js": "^2.91.0",
-    "dotenv": "^17.2.3",
-    "xlsx": "^0.18.5"
+    "@supabase/supabase-js": "^2.39.0",
+    "xlsx": "^0.18.5",
+    "dotenv": "^16.4.0"
   }
 }
