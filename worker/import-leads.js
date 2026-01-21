@@ -7,6 +7,46 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+function excelDateToISO(value) {
+    if (!value) return null;
+  
+    // Already a string date
+    if (typeof value === 'string') {
+      const d = new Date(value);
+      return isNaN(d.getTime()) ? null : d.toISOString();
+    }
+  
+    // Excel serial number
+    if (typeof value === 'number') {
+      const excelEpoch = new Date(Date.UTC(1899, 11, 30));
+      const ms = value * 24 * 60 * 60 * 1000;
+      return new Date(excelEpoch.getTime() + ms).toISOString();
+    }
+  
+    return null;
+  }
+
+  function mapRow(row) {
+    return {
+      id: String(row.Id ?? ''),
+      name: String(row.Name ?? ''),
+      lead_id: String(row.lead_id ?? ''),
+      campaign: String(row.Campaign ?? ''),
+  
+      time_utc: excelDateToISO(row.TimeUtc),
+      date_char: excelDateToISO(row.DateChar),
+      created_time: excelDateToISO(row.created_time),
+  
+      ad_id: row.ad_id ? String(row.ad_id) : null,
+      campaign_id: row.campaign_id ? String(row.campaign_id) : null,
+      form_id: row.form_id ? String(row.form_id) : null,
+      page_id: row.page_id ? String(row.page_id) : null,
+      ad_name: row.ad_name ? String(row.ad_name) : null,
+    };
+  }
+  
+  
+
 const BATCH_SIZE = 500
 const SLEEP_MS = 100
 const POLL_INTERVAL = 30_000 // check every 30 seconds
@@ -32,12 +72,12 @@ async function processJob(job) {
   console.log(`📊 Rows found: ${rows.length}`)
 
   for (let i = 0; i < rows.length; i += BATCH_SIZE) {
-    const batch = rows.slice(i, i + BATCH_SIZE)
-
-    const { error } = await supabase.rpc('bulk_insert_leads', {
+    const batch = rows.slice(i, i + BATCH_SIZE).map(mapRow)
+    console.log({batch})
+    const { error,data } = await supabase.rpc('bulk_insert_leads', {
       json_data: batch
     })
-
+    console.log({data,error})
     if (error) throw error
     await sleep(SLEEP_MS)
   }
