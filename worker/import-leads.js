@@ -7,6 +7,10 @@ const supabase = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY
 )
 
+function isWorkerEnabled() {
+  return process.env.WORKER_ENABLED === 'true';
+}
+
 function excelDateToISO(value) {
     if (!value) return null;
   
@@ -90,6 +94,10 @@ async function processJob(job) {
 
 async function workerLoop() {
   console.log('🚄 Import worker running')
+  if (!isWorkerEnabled()) {
+    console.log('⏸️ Worker is paused via WORKER_ENABLED=false');
+    process.exit(0);
+  }
 
   while (true) {
     try {
